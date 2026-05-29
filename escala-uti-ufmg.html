@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -666,12 +667,34 @@ function _updateAvailPeople(uco,tid){
 function isAnunciado(k,uco,tid){return !!(anuncios[k]&&anuncios[k][uco]&&anuncios[k][uco][tid]);}
 function hasAnuncioOnDay(k){return UCOS.some(uco=>TURNOS.some(t=>isAnunciado(k,uco,t.id)));}
 
+function isDiaFds(key){
+  const [y,m,d]=key.split('-').map(Number);
+  return isWeekend(y,m-1,d)||!!isFeriado(y,m-1,d);
+}
+
 function getUserShifts(u){
   const now=new Date();const todayK=dayKey(now.getFullYear(),now.getMonth(),now.getDate());
   const result=[];
+  const seen=new Set();
   Object.keys(schedule).filter(k=>k>=todayK).sort().forEach(k=>{
     const dd=getDayData(k);
-    UCOS.forEach(uco=>{TURNOS.forEach(t=>{if(dd[uco]&&dd[uco][t.id]===u)result.push({key:k,uco,turnoId:t.id});});});
+    const fds=isDiaFds(k);
+    UCOS.forEach(uco=>{
+      TURNOS.forEach(t=>{
+        if(dd[uco]&&dd[uco][t.id]===u){
+          // No fim de semana, agrupa t1+t2 como 'dia'
+          if(fds&&(t.id==='t1'||t.id==='t2')){
+            const diaKey=`${k}|${uco}|dia`;
+            if(!seen.has(diaKey)){
+              seen.add(diaKey);
+              result.push({key:k,uco,turnoId:'dia'});
+            }
+          } else {
+            result.push({key:k,uco,turnoId:t.id});
+          }
+        }
+      });
+    });
   });
   return result;
 }
@@ -699,7 +722,9 @@ function getVacantSlots(){
 }
 
 function shiftLabel(key,uco,tid){
-  const [y,m,d]=key.split('-').map(Number);const t=TURNOS.find(x=>x.id===tid);
+  const [y,m,d]=key.split('-').map(Number);
+  if(tid==='dia') return `${d}/${m}/${y} — ${UCO_NAMES[uco]} — Dia (07:00–19:00)`;
+  const t=TURNOS.find(x=>x.id===tid);
   return `${d}/${m}/${y} — ${UCO_NAMES[uco]} — ${t?t.label:'?'} (${t?t.time:''})`;
 }
 
@@ -820,7 +845,7 @@ function buildModalBody(k,dd,limit,feriado){
       // Assumir anúncio (outro plantonista)
       if(anunciado&&assigned&&assigned!==currentUser&&!userOnDay(currentUser,k))html+=`<button class="btn-turno-action btn-assumir" data-k="${k}" data-uco="${uco}" data-tid="${t.id}" data-prev="${assigned}">Assumir</button>`;
       // Candidatar (turno vago, não anunciado)
-      if(!assigned&&!myPendingCand&&!userOnDay(currentUser,k))html+=`<button class="btn-candidatar" data-k="${k}" data-uco="${uco}" data-tid="${t.id}">Candidatar</button>`;
+      if(!assigned&&!myPendingCand&&!userOnSameTurno(currentUser,k,uco,t.id))html+=`<button class="btn-candidatar" data-k="${k}" data-uco="${uco}" data-tid="${t.id}">Candidatar</button>`;
       if(!assigned&&myPendingCand)html+=`<span style="font-size:11px;color:var(--purple);font-weight:500;">Aguardando...</span>`;
 
       html+='</div></div>';
@@ -969,13 +994,13 @@ async function enviarCandidatura(){
   const [k,uco,tid]=val.split('|');
   const exists=candidaturas.some(c=>c.candidato===currentUser&&c.dayKey===k&&c.uco===uco&&c.turnoId===tid&&c.status==='pendente');
   if(exists){showToast('Já candidatado a este turno');return;}
-  if(userOnDay(currentUser,k)){showToast('Você já está escalado(a) neste dia!');return;}
+  if(userOnSameTurno(currentUser,k,uco,tid)){showToast('Você já está escalado(a) neste turno na outra UCO!');return;}
   await addDoc(collection(db,'candidaturas'),{candidato:currentUser,dayKey:k,uco,turnoId:tid,status:'pendente',criadoEm:new Date().toISOString()});
   showToast('Candidatura enviada!');
 }
 
 async function candidatarModal(k,uco,tid){
-  if(userOnDay(currentUser,k)){showToast('Você já está escalado(a) neste dia!');return;}
+  if(userOnSameTurno(currentUser,k,uco,tid)){showToast('Você já está escalado(a) neste turno na outra UCO!');return;}
   const exists=candidaturas.some(c=>c.candidato===currentUser&&c.dayKey===k&&c.uco===uco&&c.turnoId===tid&&c.status==='pendente');
   if(exists){showToast('Candidatura já enviada!');return;}
   await addDoc(collection(db,'candidaturas'),{candidato:currentUser,dayKey:k,uco,turnoId:tid,status:'pendente',criadoEm:new Date().toISOString()});
@@ -1158,9 +1183,33 @@ async function responderTroca(id,resp){
   const t=trocas.find(x=>x.id===id);if(!t)return;
   await updateDoc(doc(db,'trocas',id),{status:resp});
   if(resp==='aceita'){
-    const [sk,suco,stid]=t.turnSolicitante.split('|');const [rk,ruco,rtid]=t.turnReceptor.split('|');
-    if(!schedule[sk])schedule[sk]=emptyDay();if(!schedule[rk])schedule[rk]=emptyDay();
-    const prev=schedule[sk][suco][stid];schedule[sk][suco][stid]=schedule[rk][ruco][rtid];schedule[rk][ruco][rtid]=prev;
+    const [sk,suco,stid]=t.turnSolicitante.split('|');
+    const [rk,ruco,rtid]=t.turnReceptor.split('|');
+    if(!schedule[sk])schedule[sk]={};
+    if(!schedule[rk])schedule[rk]={};
+    if(!schedule[sk][suco])schedule[sk][suco]={};
+    if(!schedule[rk][ruco])schedule[rk][ruco]={};
+
+    function swapTurno(k1,u1,t1,k2,u2,t2){
+      if(!schedule[k1][u1])schedule[k1][u1]={};
+      if(!schedule[k2][u2])schedule[k2][u2]={};
+      const prev=schedule[k1][u1][t1];
+      schedule[k1][u1][t1]=schedule[k2][u2][t2];
+      schedule[k2][u2][t2]=prev;
+    }
+
+    if(stid==='dia'&&rtid==='dia'){
+      swapTurno(sk,suco,'t1',rk,ruco,'t1');
+      swapTurno(sk,suco,'t2',rk,ruco,'t2');
+    } else if(stid==='dia'){
+      swapTurno(sk,suco,'t1',rk,ruco,rtid);
+      swapTurno(sk,suco,'t2',rk,ruco,rtid);
+    } else if(rtid==='dia'){
+      swapTurno(sk,suco,stid,rk,ruco,'t1');
+      swapTurno(sk,suco,stid,rk,ruco,'t2');
+    } else {
+      swapTurno(sk,suco,stid,rk,ruco,rtid);
+    }
     await saveSchedule();showToast('Troca realizada!');
   }else{showToast('Troca recusada.');}
 }
