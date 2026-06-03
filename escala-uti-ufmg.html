@@ -1290,17 +1290,14 @@ function updateBadges(){
 
 // SINCRONIZAR CALENDÁRIO (detecta dispositivo)
 function syncCalendar(){
-  const SCRIPT_ID='AKfycbwqPHEMvx4-De_h0pWCJFdqbA7Qa-IvadxUf0to5-NUqenUbo69wSm1LO6-jQw1_oFW9Q';
-  const feedUrl=`https://script.google.com/macros/s/${SCRIPT_ID}/exec?user=${currentUser}`;
+  const feedUrl=`https://dainty-hummingbird-70488c.netlify.app/calendar?user=${currentUser}`;
   const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent);
   const isMac=/Macintosh/.test(navigator.userAgent)&&navigator.maxTouchPoints>0;
 
   if(isIOS||isMac){
-    // iPhone/iPad: mostra modal com link para copiar
     document.getElementById('iphone-link').textContent=feedUrl;
     document.getElementById('iphone-overlay').classList.remove('hidden');
   } else {
-    // Android/Desktop: abre Google Calendar direto
     const gcUrl=`https://calendar.google.com/calendar/r?cid=${encodeURIComponent(feedUrl)}`;
     window.open(gcUrl,'_blank');
     showToast('Abrindo Google Calendar...');
