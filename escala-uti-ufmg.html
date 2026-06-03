@@ -422,25 +422,30 @@ main{max-width:860px;margin:0 auto;padding:1.5rem 1rem 4rem;}
   </div>
 </div>
 
-<!-- MODAL IPHONE -->
+<!-- MODAL IPHONE/ANDROID -->
 <div id="iphone-overlay" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:300;display:flex;align-items:center;justify-content:center;padding:1rem;">
   <div style="background:#fff;border-radius:16px;box-shadow:0 8px 40px rgba(0,0,0,0.2);width:100%;max-width:400px;padding:1.5rem;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
-      <span style="font-size:16px;font-weight:500;">📱 Adicionar no iPhone</span>
+      <span style="font-size:16px;font-weight:500;">📱 Sincronizar com calendário</span>
       <button onclick="document.getElementById('iphone-overlay').classList.add('hidden')" style="border:none;background:none;font-size:20px;cursor:pointer;color:#999;">×</button>
     </div>
-    <ol style="font-size:14px;color:#666;padding-left:20px;line-height:2;">
-      <li>Abra o app <strong style="color:#1A1A18;">Ajustes</strong> do iPhone</li>
-      <li>Vá em <strong style="color:#1A1A18;">Calendário → Contas → Adicionar conta</strong></li>
-      <li>Escolha <strong style="color:#1A1A18;">Outro</strong></li>
+    <p style="font-size:13px;font-weight:600;color:#185FA5;margin-bottom:6px;">🍎 iPhone / Mac:</p>
+    <ol style="font-size:13px;color:#666;padding-left:20px;line-height:1.9;margin-bottom:12px;">
+      <li>Abra <strong style="color:#1A1A18;">Ajustes → Calendário → Contas → Adicionar conta → Outro</strong></li>
       <li>Toque em <strong style="color:#1A1A18;">Assinar calendário</strong></li>
       <li>Cole o link abaixo e toque em <strong style="color:#1A1A18;">Avançar</strong></li>
     </ol>
-    <div style="margin-top:1rem;background:#F4F3EF;border-radius:8px;padding:10px 12px;display:flex;align-items:center;gap:8px;">
+    <p style="font-size:13px;font-weight:600;color:#3B6D11;margin-bottom:6px;">🤖 Android:</p>
+    <ol style="font-size:13px;color:#666;padding-left:20px;line-height:1.9;margin-bottom:12px;">
+      <li>Abra o <strong style="color:#1A1A18;">Google Calendar</strong></li>
+      <li>Menu → <strong style="color:#1A1A18;">Outros calendários → Adicionar por URL</strong></li>
+      <li>Cole o link abaixo e toque em <strong style="color:#1A1A18;">Adicionar calendário</strong></li>
+    </ol>
+    <div style="margin-top:4px;background:#F4F3EF;border-radius:8px;padding:10px 12px;display:flex;align-items:center;gap:8px;">
       <span id="iphone-link" style="font-size:11px;color:#185FA5;flex:1;word-break:break-all;font-family:monospace;"></span>
       <button onclick="copyIphoneLink()" style="padding:6px 10px;background:#185FA5;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;white-space:nowrap;">Copiar</button>
     </div>
-    <p style="font-size:12px;color:#999;margin-top:8px;">Os plantões aparecem automaticamente no app Calendário e atualizam a cada hora.</p>
+    <p style="font-size:12px;color:#999;margin-top:8px;">Atualiza automaticamente a cada hora. Alarme 12h antes de cada plantão.</p>
   </div>
 </div>
 
@@ -1291,13 +1296,21 @@ function updateBadges(){
 // SINCRONIZAR CALENDÁRIO (detecta dispositivo)
 function syncCalendar(){
   const feedUrl=`https://dainty-hummingbird-70488c.netlify.app/calendar?user=${currentUser}`;
+  const webcalUrl=feedUrl.replace('https://','webcal://');
   const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent);
   const isMac=/Macintosh/.test(navigator.userAgent)&&navigator.maxTouchPoints>0;
+  const isAndroid=/Android/.test(navigator.userAgent);
 
   if(isIOS||isMac){
+    // iPhone/iPad/Mac: modal com link para assinar
+    document.getElementById('iphone-link').textContent=feedUrl;
+    document.getElementById('iphone-overlay').classList.remove('hidden');
+  } else if(isAndroid){
+    // Android: mostra modal com instruções
     document.getElementById('iphone-link').textContent=feedUrl;
     document.getElementById('iphone-overlay').classList.remove('hidden');
   } else {
+    // Desktop: Google Calendar
     const gcUrl=`https://calendar.google.com/calendar/r?cid=${encodeURIComponent(feedUrl)}`;
     window.open(gcUrl,'_blank');
     showToast('Abrindo Google Calendar...');
